@@ -1,17 +1,18 @@
 "use client";
+
 import Image from "next/image";
-import task from "./../../assets/images/task.png";
+import taskImage from "../../assets/images/task.png";
 import Link from "next/link";
 import Footer from "@/components/Footer";
 import { useState } from "react";
 import { supabase } from "@/lib/supabaseClient";
 
-export default function Page() {
-  const [title, setTitle] = useState("");
-  const [detail, setDetail] = useState("");
+export default function AddRunPage() {
+  const [runDate, setRunDate] = useState("");
+  const [runDistance, setRunDistance] = useState<number | "">("");
+  const [runPlace, setRunPlace] = useState("");
   const [imageFile, setImageFile] = useState<File | null>(null);
   const [imagePreview, setImagePreview] = useState("");
-  const [isCompleted, setIsCompleted] = useState(false);
 
   const handleSelectImage = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -24,19 +25,21 @@ export default function Page() {
   const handleUploadAndSave = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
 
-    if (title.trim() === '' || detail.trim() === '') {
+    if (!runDate || runDistance === "" || !runPlace) {
       alert("กรุณากรอกข้อมูลให้ครบถ้วน");
       return;
     }
 
-    let imageUrl = "";
+    let imageUrl: string | null = null;
 
     if (imageFile) {
-      const newFileName = `${Date.now()}_${imageFile.name}`;
+      // sanitize ชื่อไฟล์
+      const safeName = imageFile.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+      const fileName = `${Date.now()}_${safeName}`;
 
       const { error: uploadError } = await supabase.storage
-        .from("task_bk")
-        .upload(newFileName, imageFile);
+        .from("myrun_bucket") // ใช้ bucket ที่ถูกต้อง
+        .upload(fileName, imageFile, { upsert: false });
 
       if (uploadError) {
         alert("เกิดข้อผิดพลาดในการอัปโหลดรูป กรุณาลองใหม่อีกครั้ง");
@@ -44,21 +47,19 @@ export default function Page() {
         return;
       }
 
-      const { data: urlData } = await supabase.storage
-        .from("task_bk")
-        .getPublicUrl(newFileName);
+      const { data: urlData } = supabase.storage
+        .from("myrun_bucket")
+        .getPublicUrl(fileName);
 
       imageUrl = urlData.publicUrl;
     }
 
-    const { error: insertError } = await supabase
-      .from("task_tb")
-      .insert({
-        title: title,
-        detail: detail, 
-        image_url: imageUrl,
-        is_completed: isCompleted,
-      });
+    const { error: insertError } = await supabase.from("myrun_tb").insert({
+      run_date: runDate,
+      run_distance: runDistance,
+      run_place: runPlace,
+      run_image_url: imageUrl,
+    });
 
     if (insertError) {
       alert("เกิดข้อผิดพลาดในการบันทึกข้อมูล กรุณาลองใหม่อีกครั้ง");
@@ -66,43 +67,56 @@ export default function Page() {
       return;
     }
 
-    alert("บันทึกงานเรียบร้อยแล้ว");
-    window.location.href = "/alltask";
+    alert("บันทึกการวิ่งเรียบร้อยแล้ว");
+    window.location.href = "/"; // กลับหน้า My Run Tracker
   };
 
   return (
     <>
       <div className="flex flex-col items-center pb-30">
-        {/* ส่วนบน */}
-        <Image className="mt-20" src={task} alt="Task" width={120} />
-        <h1 className="mt-8 text-2xl font-bold text-red-700">Manage Task App</h1>
-        <h1 className="mt-2 text-lg text-red-700">บริการจัดการงานที่ทำ</h1>
+        <Image className="mt-20" src={taskImage} alt="Run" width={120} priority />
+        <h1 className="mt-8 text-2xl font-bold text-red-700">My Run Tracker</h1>
+        <h2 className="mt-2 text-lg text-red-700">เพิ่มข้อมูลการวิ่ง</h2>
 
-        {/* ฟอร์มเพิ่มงาน */}
         <div className="w-3xl border border-gray-500 p-10 mx-auto rounded-xl mt-5">
-          <h1 className="text-xl font-bold text-center">➕ เพิ่มงานใหม่</h1>
+          <h1 className="text-xl font-bold text-center">➕ เพิ่มการวิ่งใหม่</h1>
 
           <form onSubmit={handleUploadAndSave} className="w-full space-y-4">
             <div>
-              <label>ชื่องาน</label>
+              <label>วันที่วิ่ง</label>
               <input
-                value={title}
-                onChange={(e) => setTitle(e.target.value)}
-                type="text"
+                type="date"
+                value={runDate}
+                onChange={(e) => setRunDate(e.target.value)}
                 className="w-full border rounded-lg p-2"
                 required
               />
             </div>
+
             <div>
-              <label>รายละเอียด</label>
-              <textarea
-                value={detail}
-                onChange={(e) => setDetail(e.target.value)}
+              <label>ระยะทาง (กม.)</label>
+              <input
+                type="number"
+                value={runDistance}
+                onChange={(e) => setRunDistance(Number(e.target.value))}
                 className="w-full border rounded-lg p-2"
-                rows={5}
+                min={0}
+                step={0.1}
                 required
               />
             </div>
+
+            <div>
+              <label>สถานที่วิ่ง</label>
+              <input
+                type="text"
+                value={runPlace}
+                onChange={(e) => setRunPlace(e.target.value)}
+                className="w-full border rounded-lg p-2"
+                required
+              />
+            </div>
+
             <div>
               <label className="block mb-1 font-medium">อัปโหลดรูป</label>
               <input
@@ -124,20 +138,10 @@ export default function Page() {
                   alt="preview"
                   width={150}
                   height={150}
+                  style={{ objectFit: "cover" }}
                   className="mt-2"
                 />
               )}
-            </div>
-            <div>
-              <label>สถานะ</label>
-              <select
-                value={isCompleted ? "1" : "0"}
-                onChange={(e) => setIsCompleted(e.target.value === "1")}
-                className="w-full border rounded-lg p-2"
-              >
-                <option value="0">❌ ยังไม่เสร็จ</option>
-                <option value="1">✅ เสร็จแล้ว</option>
-              </select>
             </div>
 
             <div>
@@ -145,7 +149,7 @@ export default function Page() {
                 type="submit"
                 className="w-full bg-green-500 text-white px-4 py-2 rounded hover:bg-purple-400"
               >
-                บันทึกงานใหม่
+                บันทึกการวิ่ง
               </button>
             </div>
           </form>
@@ -154,7 +158,7 @@ export default function Page() {
             href="/alltask"
             className="text-blue-500 w-full text-center mt-5 block hover:text-blue-600"
           >
-            กลับไปหน้าแสดงงานทั้งหมด
+            กลับไปหน้าหลัก
           </Link>
         </div>
 

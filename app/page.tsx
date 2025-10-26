@@ -11,11 +11,11 @@ export default function Home() {
           <Image className="mt-15" src={task} alt="Task" width={150} />
 
           <h1 className="mt-10 text-3xl font-bold text-red-700">
-            Manage Task App
+            My Run Tracker
           </h1>
 
           <h1 className="text-2xl text-red-700">
-            บริหารจัดการงานที่ทำ
+            บริหารจัดการการวิ่งที่ทำ
           </h1>
 
           <Link href="/alltask" className="bg-green-500 px-15 py-2 rounded mt-5 text-gray-800
